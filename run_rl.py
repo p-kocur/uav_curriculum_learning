@@ -94,7 +94,7 @@ if __name__ == "__main__":
         best_model_save_path=log_dir,
         log_path=log_dir,
         eval_freq=max(rl_dict["nb_eval_every"] // rl_dict["nb_training_envs"], 1),
-        n_eval_episodes=1,
+        n_eval_episodes=4,
         deterministic=True,
         render=False,
     )
@@ -115,9 +115,13 @@ if __name__ == "__main__":
         verbose=0,
         tensorboard_log=log_dir,
         policy_kwargs={"activation_fn": activation_fn, "net_arch": net_arch},
+        target_kl=0.1,
+        clip_range=0.2,
+
     )
     model.learn(
         total_timesteps=rl_dict["nb_training_steps"],
         callback=eval_callback,
         progress_bar=True,
+        tb_log_name="ppo_ppo",
     )

@@ -63,8 +63,13 @@ GegelatiWrapper::getDataSources()
   return dataSources;
 }
 
-void GegelatiWrapper::reset(size_t seed, Learn::LearningMode mode)
-{
+void GegelatiWrapper::reset(size_t seed,
+  Learn::LearningMode mode,
+  uint16_t nbThreads,
+  uint64_t maxNbInstructions) {
+// Use only what you need; ignore unused parameters if not needed.
+(void)nbThreads;
+(void)maxNbInstructions;
   drone_forest_.Reset(seed);
   SetLidarDistances(drone_forest_.GetLidarDistances());
   is_collision_ = false;

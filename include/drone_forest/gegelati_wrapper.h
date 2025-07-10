@@ -102,7 +102,11 @@ class GegelatiWrapper : public Learn::LearningEnvironment
    * @param seed Integer for controlling randomness.
    * @param mode Learning mode in which environment should be reset.
    */
-  virtual void reset(size_t seed, Learn::LearningMode mode) override;
+  virtual void reset(size_t seed = 0,
+    Learn::LearningMode mode = Learn::LearningMode::TRAINING,
+    uint16_t nbThreads = 1,
+    uint64_t maxNbInstructions = std::numeric_limits<uint64_t>::max()) override;
+
 
   /**
    * @brief Execute an action in the learning environment.
