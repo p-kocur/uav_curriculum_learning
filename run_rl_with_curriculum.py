@@ -58,7 +58,9 @@ def plot_gmm_2d(gmm, tasks_scaled, alps, save_path=None):
         mean = gmm.means_[i]
         cov = _get_covariance_matrix(gmm, i)
 
-        lambda_, v = np.linalg.eigh(cov)
+        # Ensure covariance is 2x2 for 2D plotting
+        cov_2d = cov[:2, :2] if cov.shape[0] > 2 else cov
+        lambda_, v = np.linalg.eigh(cov_2d)
         lambda_ = np.sqrt(lambda_)
         angle = np.degrees(np.arctan2(*v[:, 0][::-1]))
 
@@ -72,10 +74,10 @@ def plot_gmm_2d(gmm, tasks_scaled, alps, save_path=None):
         )
         ax.add_patch(ellipse)
 
-    ax.set_xlabel("stump height")
-    ax.set_ylabel("spacing")
-    ax.set_xlim(0, 3)
-    ax.set_ylim(0, 6)
+    ax.set_xlabel("Number of Trees")
+    ax.set_ylabel("Static Y Limit")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
 
     sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
@@ -100,7 +102,7 @@ class ALPGMMTeacher:
         self.gmm = None
         self.fit_every = fit_every
         self.steps = 0
-        self.gmm_components = len(param_bounds)
+        self.gmm_components = len(param_bounds)+1
         self.seed = 123
         self.random_state = np.random.RandomState(self.seed)
         self.knn = NearestNeighbors(n_neighbors=1, algorithm='kd_tree')
@@ -142,7 +144,7 @@ class ALPGMMTeacher:
         self.task_history.append(task)
         self.alp_history.append(alp)
 
-        if self.steps % self.fit_every == 0 and self.steps != 0: #and len(self.task_history) >= self.max_history // 2:
+        if self.steps % self.fit_every == 0 and self.steps != 0 and len(self.task_history) >= self.max_history // 2:
             self._fit_gmm()
 
     def _sample_random(self):
@@ -205,7 +207,7 @@ class ALPGMMTeacher:
 
         print(f"Fitted GMM with {self.gmm_components} components after {self.steps} steps.")
         plot_gmm_2d(self.gmm, tasks_scaled, alps_scaled, save_path=f"gmm_plots/gmm_plot_{self.steps}.png")
-        
+
     def _compute_alp(self, task, reward):
         if len(self.task_history) == 0:
             return 0.0
