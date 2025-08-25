@@ -19,6 +19,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import matplotlib as mpl
 import numpy as np
+from typing import Callable, Dict, Optional
+from stable_baselines3.common.utils import set_random_seed
 
 from scripts.gym_wrapper import DroneForestEnv
 import scripts.json_utils as jutils
@@ -42,8 +44,11 @@ def evaluate_agent(model, eval_envs, n_episodes=4):
     
     return np.mean(total_rewards)
 
-def make_env(rank: int, seed: int = 0, config_dict: Dict = {}) -> DroneForestEnv:
-    """Make the drone forest environment."""
+def make_env(rank: int, seed: int = 0, config_dict: Optional[Dict] = None) -> Callable[[], DroneForestEnv]:
+    """Factory function for DroneForestEnv, compatible with SubprocVecEnv."""
+
+    if config_dict is None:
+        config_dict = {}
 
     def _init() -> DroneForestEnv:
         env = DroneForestEnv(
@@ -72,8 +77,10 @@ def make_env(rank: int, seed: int = 0, config_dict: Dict = {}) -> DroneForestEnv
     set_random_seed(seed)
     return _init
 
+
 def dict_from_task(task: list):
     config_dict = jutils.read_env_config("./env_config.json")
     config_dict["n_trees"] = int(task[0])
     config_dict["y_static_limit"] = float(task[1])
     return config_dict
+

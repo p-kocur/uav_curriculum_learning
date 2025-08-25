@@ -13,7 +13,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.utils import set_random_seed
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 import torch
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
@@ -21,7 +21,7 @@ import matplotlib as mpl
 import numpy as np
 
 import scripts.json_utils as jutils
-from teachers import OracleTeacher, ALPGMMTeacher
+from teachers import OracleTeacher, ALPGMMTeacher, RandomTeacher
 from utils import dict_from_task, make_env, evaluate_agent
 
 
@@ -102,28 +102,31 @@ if __name__ == "__main__":
     '''
     Perform curriculum learning using ALPGMMTeacher.
     '''
-
+    # Define parameter bounds for the task
+    param_bounds = [
+        (3, 100), # n_trees
+        (5.0, 24) # y_static_limit
+    ]
+    teacher = None
     if "alpgmm" in sys.argv:
-        # Define parameter bounds for the task
-        param_bounds = [
-            (3, 100), # n_trees
-            (5.0, 24) # y_static_limit
-        ]
-        teacher = ALPGMMTeacher(param_bounds)
+        teacher = ALPGMMTeacher(param_bounds, model)
     elif "oracle" in sys.argv:
         teacher = OracleTeacher(model)
+    elif "random" in sys.argv:
+        teacher = RandomTeacher(param_bounds, model)
     
     total_steps = rl_dict["nb_training_steps"]
     step_chunk = 1000  # update curriculum every X steps
 
     for t in range(0, total_steps, step_chunk):
+        
         task = teacher.sample_task()  
         config_dict = dict_from_task(task)
 
         print(f"\n\n\nTask: {task}\n\n\n")
 
         # Nowe treningowe środowiska
-        train_envs = SubprocVecEnv(
+        train_envs = DummyVecEnv(
             [make_env(i, config_dict=config_dict) 
             for i in range(rl_dict["nb_training_envs"])]
         )

@@ -22,9 +22,31 @@ import numpy as np
 
 from utils import evaluate_agent, dict_from_task, make_env
 
+class Teacher:
+    def __init__(self, model):
+        self.evaluate_envs = []
+        evaluate_tasks = []
+        elements_1 = np.linspace(3, 100, 10)
+        elements_2 = np.linspace(24, 5, 10)
+        for e1, e2 in zip(elements_1, elements_2):
+            evaluate_tasks.append([float(e1), float(e2)])
+        for task in evaluate_tasks:
+            self.evaluate_envs.append(DummyVecEnv([make_env(0, config_dict=dict_from_task(task))]))
+        self.competences = []
+        self.model= model
+        self.seed = 111
+        self.random_state = np.random.RandomState(self.seed)
 
-class OracleTeacher:
+    def compute_competence(self):
+        sum = 0
+        for env in self.evaluate_envs:
+            sum += evaluate_agent(self.model, env)
+        return sum
+
+
+class OracleTeacher(Teacher):
     def __init__(self, model, fit_every: int = 3, initial_state: np.ndarray = None, direction_vector: np.ndarray = None):
+        super().__init__(model)
         self.fit_every = fit_every
         if initial_state is None:
             self.state = np.array([[3, 24]])
@@ -37,18 +59,7 @@ class OracleTeacher:
         self.last_sum = -np.inf
         self.current_sum = 0
         self.step = 0
-        self.model = model
-        self.evaluate_envs = []
-        evaluate_tasks = []
-        elements_1 = np.linspace(3, 100, 10)
-        elements_2 = np.linspace(24, 5, 10)
-        for e1, e2 in zip(elements_1, elements_2):
-            evaluate_tasks.append([float(e1), float(e2)])
-        for task in evaluate_tasks:
-            self.evaluate_envs.append(DummyVecEnv([make_env(0, config_dict=dict_from_task(task))]))
         
-
-
     def sample_task(self):
         return (self.state + self.direction * random.random())[0, :]
     
@@ -57,6 +68,7 @@ class OracleTeacher:
 
         if self.step % self.fit_every == 0:
             self.current_sum = self.compute_competence()
+            self.competences.append(self.current_sum)
             if self.current_sum > self.last_sum:
                 print(f"Fitted with r = {self.current_sum} agains r_old = {self.last_sum}")
                 self.last_sum = self.current_sum
@@ -65,14 +77,44 @@ class OracleTeacher:
                 print(f"Not fitted with r_old = {self.last_sum}")
             print(f"Current state: {self.state}")
             self.current_sum = 0
+            
+            x = np.linspace(0,self.step, len(self.competences))
+            fig, ax = plt.subplots(1, 1)
+            ax.plot(x, np.array(self.competences))
+            fig.savefig(f"various_imgs/no_{self.step}")
+            plt.close(fig)
 
-    def compute_competence(self):
-        sum = 0
-        for env in self.evaluate_envs:
-            sum += evaluate_agent(self.model, env)
-        return sum
+class RandomTeacher(Teacher):
+    def __init__(self, param_bounds, model):
+        super().__init__(model)
+        self.param_bounds = param_bounds
+        self.mins = np.array([low for (low, _) in self.param_bounds])
+        self.maxs = np.array([high for (_, high) in self.param_bounds])
+        self.steps = 0
+
+    def sample_task(self):
+        self.steps += 1
+        return self._sample_random()
+    
+    def update(self, task, reward):
+        self.competences.append(self.compute_competence())
+        print("\n\n\n")
+        print(self.steps)
+        print("\n\n\n")
+        x = np.linspace(0,self.steps, len(self.competences))
+        fig, ax = plt.subplots(1, 1)
+        ax.plot(x, np.array(self.competences))
+        fig.savefig(f"various_imgs/no_rand_{self.steps}")
+        plt.close(fig)
+
+    def _sample_random(self):
+        return np.array([(high-low) * self.random_state.rand() + low for (low, high) in self.param_bounds])
 
 
+
+        
+
+    
 def proportional_choice(v, random_state):
     probas = np.array(v) / np.sum(v)
     return np.random.choice(range(len(v)), p=probas)
@@ -142,8 +184,9 @@ def plot_gmm_2d(gmm, tasks_scaled, alps, save_path=None):
 
     plt.close(fig)
 
-class ALPGMMTeacher:
-    def __init__(self, param_bounds, max_history=100, fit_every=2):
+class ALPGMMTeacher(Teacher):
+    def __init__(self, param_bounds, model, max_history=500, fit_every=2):
+        super().__init__(model)
         self.param_bounds = param_bounds
         self.max_history = max_history
         self.task_history = deque(maxlen=max_history)
@@ -153,8 +196,6 @@ class ALPGMMTeacher:
         self.fit_every = fit_every
         self.steps = 0
         self.gmm_components = len(param_bounds)+1
-        self.seed = 123
-        self.random_state = np.random.RandomState(self.seed)
         self.knn = NearestNeighbors(n_neighbors=1, algorithm='kd_tree')
 
         self.mins = np.array([low for (low, _) in self.param_bounds])
@@ -163,7 +204,7 @@ class ALPGMMTeacher:
     def sample_task(self):
         self.steps += 1
 
-        if self.gmm is None or np.random.rand() < 0.2 or len(self.task_history) < self.max_history // 2:
+        if self.gmm is None or np.random.rand() < 0.2 or len(self.task_history) < 10:
             return self._sample_random()
 
         self.alp_means = [mean[-1] for mean in self.gmm.means_]
@@ -194,8 +235,20 @@ class ALPGMMTeacher:
         self.task_history.append(task)
         self.alp_history.append(alp)
 
-        if self.steps % self.fit_every == 0 and self.steps != 0 and len(self.task_history) >= self.max_history // 2:
+        self.competences.append(self.compute_competence())
+        print("\n\n\n")
+        print(self.steps)
+        print("\n\n\n")
+        x = np.linspace(0,self.steps, len(self.competences))
+        fig, ax = plt.subplots(1, 1)
+        ax.plot(x, np.array(self.competences))
+        fig.savefig(f"various_imgs/no_alp_{self.steps}")
+        plt.close(fig)
+
+        if self.steps % self.fit_every == 0 and self.steps != 0 and len(self.task_history) >= 10:
             self._fit_gmm()
+            
+
 
     def _sample_random(self):
         return np.array([(high-low) * self.random_state.rand() + low for (low, high) in self.param_bounds])
