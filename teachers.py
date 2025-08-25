@@ -1,20 +1,9 @@
-import json
-import os
-import time
 import numpy as np
 from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import MinMaxScaler
 from collections import deque
 import random
-from typing import Dict
-from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import EvalCallback
-from stable_baselines3.common.env_checker import check_env
-from stable_baselines3.common.utils import set_random_seed
-from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
-from stable_baselines3.common.evaluation import evaluate_policy
-import torch
+from stable_baselines3.common.vec_env import DummyVecEnv
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import matplotlib as mpl

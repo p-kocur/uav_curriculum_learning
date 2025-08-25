@@ -2,28 +2,15 @@ import json
 import os
 import time
 import sys
-import numpy as np
-from sklearn.mixture import GaussianMixture
-from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import MinMaxScaler
-from collections import deque
-import random
-from typing import Dict
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.env_checker import check_env
-from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 import torch
-import matplotlib.pyplot as plt
-from matplotlib.patches import Ellipse
-import matplotlib as mpl
-import numpy as np
 
 import scripts.json_utils as jutils
 from teachers import OracleTeacher, ALPGMMTeacher, RandomTeacher
 from utils import dict_from_task, make_env, evaluate_agent
-
 
 
 if __name__ == "__main__":

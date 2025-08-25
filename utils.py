@@ -1,23 +1,6 @@
-import json
-import os
-import time
-import sys
 import numpy as np
-from sklearn.mixture import GaussianMixture
-from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import MinMaxScaler
-from collections import deque
-import random
 from typing import Dict
-from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import EvalCallback
-from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.utils import set_random_seed
-from stable_baselines3.common.vec_env import SubprocVecEnv
-import torch
-import matplotlib.pyplot as plt
-from matplotlib.patches import Ellipse
-import matplotlib as mpl
 import numpy as np
 from typing import Callable, Dict, Optional
 from stable_baselines3.common.utils import set_random_seed
@@ -25,8 +8,9 @@ from stable_baselines3.common.utils import set_random_seed
 from scripts.gym_wrapper import DroneForestEnv
 import scripts.json_utils as jutils
 
-def evaluate_agent(model, eval_envs, n_episodes=4):
+def evaluate_agent(model, eval_envs, n_episodes=4, return_partials=False):
     total_rewards = []
+    partial_rewards = np.zeros(eval_envs.num_envs)
     for _ in range(n_episodes):
         obs = eval_envs.reset()
         done = [False] * eval_envs.num_envs
@@ -41,8 +25,12 @@ def evaluate_agent(model, eval_envs, n_episodes=4):
             done = [d or d_ for d, d_ in zip(done, dones)]
 
         total_rewards.extend(ep_rewards)
+        partial_rewards = partial_rewards + np.array(ep_rewards)
     
-    return np.mean(total_rewards)
+    if return_partials:
+        return np.mean(total_rewards), partial_rewards
+    else:
+        return np.mean(total_rewards)
 
 def make_env(rank: int, seed: int = 0, config_dict: Optional[Dict] = None) -> Callable[[], DroneForestEnv]:
     """Factory function for DroneForestEnv, compatible with SubprocVecEnv."""
