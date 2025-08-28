@@ -25,12 +25,33 @@ class Teacher:
         self.model= model
         self.seed = 111
         self.random_state = np.random.RandomState(self.seed)
+        self.partial_rewards = [[] for _ in range(len(self.evaluate_envs))]
+        self.plot_directory = None
+        
 
     def compute_competence(self):
         sum = 0
-        for env in self.evaluate_envs:
-            sum += evaluate_agent(self.model, env)
-        return sum
+        for i, env in enumerate(self.evaluate_envs):
+            score = evaluate_agent(self.model, env)
+            self.partial_rewards[i].append(score)
+            sum += score
+        return sum/len(self.evaluate_envs)
+    
+    def plot(self):
+        x = np.linspace(0,self.steps, len(self.competences))
+
+        fig, ax = plt.subplots(len(self.partial_rewards), 1)
+        for i in range(len(self.partial_rewards)):
+            ax[i].plot(x, np.array(self.partial_rewards[i]))
+        fig.savefig(self.plot_directory + "/partial")
+        plt.close(fig)
+
+        fig, ax = plt.subplots(1, 1)
+        ax.plot(x, np.array(self.competences))
+        fig.savefig(self.plot_directory + "/mean")
+        plt.close(fig)
+
+        
 
 
 class OracleTeacher(Teacher):

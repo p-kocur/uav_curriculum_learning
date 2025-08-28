@@ -105,27 +105,32 @@ if __name__ == "__main__":
     total_steps = rl_dict["nb_training_steps"]
     step_chunk = 1000  # update curriculum every X steps
 
-    for t in range(0, total_steps, step_chunk):
-        
-        task = teacher.sample_task()  
-        config_dict = dict_from_task(task)
+    try:
+        for t in range(0, total_steps, step_chunk):
+            
+            task = teacher.sample_task()  
+            config_dict = dict_from_task(task)
 
-        print(f"\n\n\nTask: {task}\n\n\n")
+            print(f"\n\n\nTask: {task}\n\n\n")
 
-        # Nowe treningowe środowiska
-        train_envs = DummyVecEnv(
-            [make_env(i, config_dict=config_dict) 
-            for i in range(rl_dict["nb_training_envs"])]
-        )
-        
-        model.set_env(train_envs)
-        
-        model.learn(total_timesteps=step_chunk, reset_num_timesteps=False, callback=eval_callback)
+            # Nowe treningowe środowiska
+            train_envs = DummyVecEnv(
+                [make_env(i, config_dict=config_dict) 
+                for i in range(rl_dict["nb_training_envs"])]
+            )
+            
+            model.set_env(train_envs)
+            
+            model.learn(total_timesteps=step_chunk, reset_num_timesteps=False, callback=eval_callback)
 
-        eval_envs_task = SubprocVecEnv(
-            [make_env(i, config_dict=config_dict) for i in range(rl_dict["nb_eval_envs"])]
-        )
+            eval_envs_task = SubprocVecEnv(
+                [make_env(i, config_dict=config_dict) for i in range(rl_dict["nb_eval_envs"])]
+            )
 
-        reward = evaluate_agent(model, eval_envs_task, n_episodes=4)
+            reward = evaluate_agent(model, eval_envs_task, n_episodes=4)
 
-        teacher.update(task, reward)
+            teacher.update(task, reward)
+    except Exception as e:
+        print(e)
+
+    teacher.plot("test")
