@@ -11,16 +11,21 @@ import numpy as np
 
 from utils import evaluate_agent, dict_from_task, make_env
 
+
+
 class Teacher:
-    def __init__(self, model):
+    def __init__(self, model, param_bounds=None, env_type=None):
+        self.param_bounds = param_bounds
+        self.mins = np.array([low for (low, _) in self.param_bounds])
+        self.maxs = np.array([high for (_, high) in self.param_bounds])
         self.evaluate_envs = []
         evaluate_tasks = []
-        elements_1 = np.linspace(3, 100, 10)
-        elements_2 = np.linspace(24, 5, 10)
+        elements_1 = np.random.uniform(low=self.mins[0], high=self.maxs[0], size=10)
+        elements_2 = np.random.uniform(low=self.mins[1], high=self.maxs[1], size=10)
         for e1, e2 in zip(elements_1, elements_2):
             evaluate_tasks.append([float(e1), float(e2)])
         for task in evaluate_tasks:
-            self.evaluate_envs.append(DummyVecEnv([make_env(0, config_dict=dict_from_task(task))]))
+            self.evaluate_envs.append(DummyVecEnv([make_env(0, config_dict=dict_from_task(task), env_type=env_type)]))
         self.competences = []
         self.model= model
         self.seed = 111
@@ -55,8 +60,8 @@ class Teacher:
 
 
 class OracleTeacher(Teacher):
-    def __init__(self, model, fit_every: int = 3, initial_state: np.ndarray = None, direction_vector: np.ndarray = None):
-        super().__init__(model)
+    def __init__(self, model, param_bounds, env_type, fit_every: int = 3, initial_state: np.ndarray = None, direction_vector: np.ndarray = None):
+        super().__init__(model, param_bounds, env_type)
         self.fit_every = fit_every
         if initial_state is None:
             self.state = np.array([[3, 24]])
@@ -95,12 +100,10 @@ class OracleTeacher(Teacher):
             plt.close(fig)
 
 class RandomTeacher(Teacher):
-    def __init__(self, param_bounds, model):
-        super().__init__(model)
-        self.param_bounds = param_bounds
-        self.mins = np.array([low for (low, _) in self.param_bounds])
-        self.maxs = np.array([high for (_, high) in self.param_bounds])
+    def __init__(self, model, param_bounds, env_type):
+        super().__init__(model, param_bounds, env_type)
         self.steps = 0
+        self.random = "random_teacher"
 
     def sample_task(self):
         self.steps += 1
@@ -195,8 +198,8 @@ def plot_gmm_2d(gmm, tasks_scaled, alps, save_path=None):
     plt.close(fig)
 
 class ALPGMMTeacher(Teacher):
-    def __init__(self, param_bounds, model, max_history=500, fit_every=2):
-        super().__init__(model)
+    def __init__(self, model, param_bounds, env_type, max_history=500, fit_every=2):
+        super().__init__(model, param_bounds, env_type)
         self.param_bounds = param_bounds
         self.max_history = max_history
         self.task_history = deque(maxlen=max_history)
