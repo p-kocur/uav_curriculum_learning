@@ -3,7 +3,7 @@ from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import NearestNeighbors
 from collections import deque
 import random
-from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import matplotlib as mpl
@@ -25,7 +25,7 @@ class Teacher:
         for e1, e2 in zip(elements_1, elements_2):
             evaluate_tasks.append([float(e1), float(e2)])
         for task in evaluate_tasks:
-            self.evaluate_envs.append(DummyVecEnv([make_env(0, config_dict=dict_from_task(task), env_type=env_type)]))
+            self.evaluate_envs.append(SubprocVecEnv([make_env(0, config_dict=dict_from_task(task), env_type=env_type)]))
         self.competences = []
         self.model= model
         self.seed = 111
@@ -198,7 +198,7 @@ def plot_gmm_2d(gmm, tasks_scaled, alps, save_path=None):
     plt.close(fig)
 
 class ALPGMMTeacher(Teacher):
-    def __init__(self, model, param_bounds, env_type, max_history=500, fit_every=2):
+    def __init__(self, model, param_bounds, env_type, max_history=250, fit_every=2):
         super().__init__(model, param_bounds, env_type)
         self.param_bounds = param_bounds
         self.max_history = max_history
@@ -248,15 +248,13 @@ class ALPGMMTeacher(Teacher):
         self.task_history.append(task)
         self.alp_history.append(alp)
 
-        self.competences.append(self.compute_competence())
-        print("\n\n\n")
-        print(self.steps)
-        print("\n\n\n")
-        x = np.linspace(0,self.steps, len(self.competences))
-        fig, ax = plt.subplots(1, 1)
-        ax.plot(x, np.array(self.competences))
-        fig.savefig(f"various_imgs/no_alp_{self.steps}")
-        plt.close(fig)
+        if self.steps % 10 == 0:
+            self.competences.append(self.compute_competence())
+            x = np.linspace(0,self.steps, len(self.competences))
+            fig, ax = plt.subplots(1, 1)
+            ax.plot(x, np.array(self.competences))
+            fig.savefig(f"various_imgs/no_alp_bipedal{self.steps}.png")
+            plt.close(fig)
 
         if self.steps % self.fit_every == 0 and self.steps != 0 and len(self.task_history) >= 10:
             self._fit_gmm()
@@ -294,19 +292,11 @@ class ALPGMMTeacher(Teacher):
         return (alp - min_alp) / (max_alp - min_alp)
 
     def _fit_gmm(self):
-        for t in self.task_history:
-            print("Task:", t)
         tasks = np.array(self.task_history)
         alps = np.array(self.alp_history)
 
-        print(tasks)
-        print(alps)
-
         tasks_scaled = self._scale_task(tasks)
         alps_scaled = self._scale_alp(alps.reshape(-1, 1))
-
-        print(tasks_scaled)
-        print(alps_scaled)
 
         X_scaled = np.hstack([tasks_scaled, alps_scaled])
 
