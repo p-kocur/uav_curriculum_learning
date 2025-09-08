@@ -11,8 +11,6 @@ import numpy as np
 
 from utils import evaluate_agent, dict_from_task, make_env
 
-
-
 class Teacher:
     def __init__(self, model, param_bounds=None, env_type=None):
         self.param_bounds = param_bounds
