@@ -4,12 +4,19 @@ from stable_baselines3.common.utils import set_random_seed
 import numpy as np
 from typing import Callable, Dict, Optional
 import gymnasium as gym
-from carl.envs import CARLCartPole
-
-from scripts.gym_wrapper import DroneForestEnv
-import scripts.json_utils as jutils
+try:
+    from carl.envs import CARLCartPole
+except ImportError:
+    pass
 
 import gymnasium as gym
+from gymnasium.wrappers import TimeLimit
+
+from bipedal_parametrized import ParamBipedalWalker
+#from scripts.gym_wrapper import DroneForestEnv
+import scripts.json_utils as jutils
+
+
 
 class SqueezeObsWrapper(gym.ObservationWrapper):
     """Ensure obs has shape (4,) not (4,1)."""
@@ -109,6 +116,13 @@ def make_env(rank: int, seed: int = 0, config_dict: Optional[Dict] = None, env_t
             env = RemoveContextWrapper(env)
             env.reset(seed=seed + rank)
             return env
+    elif env_type == "bipedal": 
+        def _init() -> object:
+            stump_height = config_dict.get("stump_height", 1.0)
+            stump_distance = config_dict.get("stump_distance", 1.0)
+            env = TimeLimit(ParamBipedalWalker(stump_height=stump_height, stump_distance=stump_distance), max_episode_steps=2000)
+            env.reset(seed=seed + rank)
+            return env
     else:
         raise ValueError(f"Unknown env_type: {env_type}")
         
@@ -129,6 +143,12 @@ def dict_from_task(task: list, env_type: str = "drone"):
         config_dict["masspole"] = float(task[0])
         config_dict["length"] = float(task[1])
         # Add more parameters as needed
+        return config_dict
+    elif env_type == "bipedal":
+        # Example: task = [stump_height, stump_distance]
+        config_dict = {}
+        config_dict["stump_height"] = float(task[0])
+        config_dict["stump_distance"] = float(task[1])
         return config_dict
     else:
         raise ValueError(f"Unknown env_type: {env_type}")

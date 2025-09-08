@@ -2,11 +2,12 @@ import json
 import os
 import time
 import sys
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, SAC
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 import torch
+from torch import nn
 
 import scripts.json_utils as jutils
 from teachers import OracleTeacher, ALPGMMTeacher, RandomTeacher
@@ -25,6 +26,12 @@ def get_scenario_config(scenario):
         param_bounds = [
             (0.01, 1.0),  # masspole
             (0.05, 5.0)   # length
+        ]
+    elif scenario == "bipedal_walker":
+        env_config_path = "./env_config_bipedal_walker.json"
+        param_bounds = [
+            (0.1, 1.0),  # stump_height
+            (0.1, 1.0)   # stump_distance
         ]
     else:
         raise ValueError("Unknown scenario: {}".format(scenario))
@@ -69,20 +76,41 @@ def main(scenario, teacher_type):
         render=False,
     )
 
-    activation_fn = {
-        "sigmoid": torch.nn.Sigmoid,
-        "tanh": torch.nn.Tanh
-    }.get(rl_dict["activation_fn"], torch.nn.ReLU)
-    net_arch = [rl_dict["nb_neurons"]] * rl_dict["nb_layers"]
+    # activation_fn = {
+    #     "sigmoid": torch.nn.Sigmoid,
+    #     "tanh": torch.nn.Tanh,
+    #     "relu": torch.nn.ReLU,
+    # }.get(rl_dict["activation_fn"], torch.nn.ReLU)
+    # net_arch = [rl_dict["nb_neurons"]] * rl_dict["nb_layers"]
 
-    model = PPO(
+    # model = SAC(
+    #     "MlpPolicy",
+    #     train_envs,
+    #     verbose=0,
+    #     tensorboard_log=log_dir,
+    #     policy_kwargs={"activation_fn": activation_fn, "net_arch": net_arch},
+    #     target_kl=0.1,
+    #     clip_range=0.2,
+    #     device="cuda" if torch.cuda.is_available() else "cpu",
+    # )
+
+    policy_kwargs = dict(
+        net_arch=[400, 300],
+        activation_fn=nn.ReLU
+    )
+
+    # Define SAC model
+    model = SAC(
         "MlpPolicy",
         train_envs,
-        verbose=0,
-        tensorboard_log=log_dir,
-        policy_kwargs={"activation_fn": activation_fn, "net_arch": net_arch},
-        target_kl=0.1,
-        clip_range=0.2,
+        policy_kwargs=policy_kwargs,
+        ent_coef=0.005,             # entropy coefficient
+        learning_rate=0.001,        # learning rate
+        train_freq=10,              # gradient updates every 10 steps
+        batch_size=1000,            # number of samples per gradient step
+        buffer_size=2_000_000,      # replay buffer size
+        verbose=1,
+        device="cuda" if torch.cuda.is_available() else "cpu",
     )
 
     if teacher_type == "alpgmm":
@@ -95,14 +123,15 @@ def main(scenario, teacher_type):
         raise ValueError("Unknown teacher type: {}".format(teacher_type))
 
     total_steps = rl_dict["nb_training_steps"]
-    step_chunk = 100
+    step_chunk = 2000
 
     for t in range(0, total_steps, step_chunk):
+        print(f"Training step {t}/{total_steps}")
         task = teacher.sample_task()
         config_dict = dict_from_task(task)
         print(f"\n\n\nTask: {task}\n\n\n")
 
-        train_envs = DummyVecEnv(
+        train_envs = SubprocVecEnv(
             [make_env(i, config_dict=config_dict, env_type=scenario.split('_')[0]) for i in range(rl_dict["nb_training_envs"])]
         )
         model.set_env(train_envs)
@@ -114,7 +143,15 @@ def main(scenario, teacher_type):
         reward = evaluate_agent(model, eval_envs_task, n_episodes=4)
         teacher.update(task, reward)
 
-    teacher.plot("test")
+    try:
+        teacher.plot("test")
+    except Exception as e:
+        print(f"Error plotting teacher data: {e}")
+
+    try:
+        model.save(os.path.join(log_dir, "final_model"))
+    except Exception as e:
+        print(f"Error saving model: {e}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
