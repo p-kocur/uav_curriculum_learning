@@ -144,10 +144,17 @@ def main(scenario, teacher_type):
     #     seed=0,
     # )
 
-    model = TD3.load_from_hub(
-        repo_id="sb3/td3-BipedalWalker-v3",
-        # optionally: load custom policy_kwargs if needed (but the saved model should include that)
+    # model = TD3.load_from_hub(
+    #     repo_id="sb3/td3-BipedalWalker-v3",
+    #     # optionally: load custom policy_kwargs if needed (but the saved model should include that)
+    # )
+
+    checkpoint = load_from_hub(
+        repo_id="araffin/tqc-BipedalWalker-v3",
+        filename="tqc-BipedalWalker-v3.zip"
     )
+
+    model = TD3.load(checkpoint)
 
     if teacher_type == "alpgmm":
         teacher = ALPGMMTeacher(model, param_bounds, env_type=scenario.split('_')[0])
