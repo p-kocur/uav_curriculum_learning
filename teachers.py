@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from sklearn.mixture import GaussianMixture
 from sklearn.neighbors import NearestNeighbors
 from collections import deque
@@ -12,18 +13,34 @@ import numpy as np
 from utils import evaluate_agent, dict_from_task, make_env
 
 class Teacher:
-    def __init__(self, model, param_bounds=None, env_type=None):
+    def __init__(self, model, param_bounds=None, env_type=None, competence_metric="binary"):
         self.param_bounds = param_bounds
         self.mins = np.array([low for (low, _) in self.param_bounds])
         self.maxs = np.array([high for (_, high) in self.param_bounds])
+        
         self.evaluate_envs = []
         evaluate_tasks = []
-        elements_1 = np.random.uniform(low=self.mins[0], high=self.maxs[0], size=10)
-        elements_2 = np.random.uniform(low=self.mins[1], high=self.maxs[1], size=10)
-        for e1, e2 in zip(elements_1, elements_2):
-            evaluate_tasks.append([float(e1), float(e2)])
-        for task in evaluate_tasks:
-            self.evaluate_envs.append(SubprocVecEnv([make_env(0, config_dict=dict_from_task(task), env_type=env_type)]))
+        self.env_type = env_type
+
+        self.competence_metric = competence_metric
+
+        if self.competence_metric == "average":
+            elements_1 = np.random.uniform(low=self.mins[0], high=self.maxs[0], size=10)
+            elements_2 = np.random.uniform(low=self.mins[1], high=self.maxs[1], size=10)
+            for e1, e2 in zip(elements_1, elements_2):
+                evaluate_tasks.append([float(e1), float(e2)])
+            for task in evaluate_tasks:
+                self.evaluate_envs.append(SubprocVecEnv([make_env(0, config_dict=dict_from_task(task), env_type=env_type)])) if torch.cuda.is_available() else self.evaluate_envs.append(DummyVecEnv([make_env(0, config_dict=dict_from_task(task), env_type=env_type)]))
+
+        elif self.competence_metric == "binary":
+            elements_1 = np.linspace(self.mins[0], self.maxs[0], 5)
+            elements_2 = np.linspace(self.mins[1], self.maxs[1], 5)
+            for e1 in elements_1:
+                for e2 in elements_2:
+                    evaluate_tasks.append([float(e1), float(e2)])
+            for task in evaluate_tasks:
+                self.evaluate_envs.append(SubprocVecEnv([make_env(0, config_dict=dict_from_task(task), env_type=env_type)])) if torch.cuda.is_available() else self.evaluate_envs.append(DummyVecEnv([make_env(0, config_dict=dict_from_task(task), env_type=env_type)]))
+
         self.competences = []
         self.model= model
         self.seed = 111
@@ -31,14 +48,22 @@ class Teacher:
         self.partial_rewards = [[] for _ in range(len(self.evaluate_envs))]
         self.plot_directory = None
         
-
     def compute_competence(self):
-        sum = 0
-        for i, env in enumerate(self.evaluate_envs):
-            score = evaluate_agent(self.model, env)
-            self.partial_rewards[i].append(score)
-            sum += score
-        return sum/len(self.evaluate_envs)
+        if self.competence_metric == "average":
+            sum = 0
+            for i, env in enumerate(self.evaluate_envs):
+                score = evaluate_agent(self.model, env)
+                self.partial_rewards[i].append(score)
+                sum += score
+            return sum/len(self.evaluate_envs)
+        elif self.competence_metric == "binary":
+            sum = 0
+            for i, env in enumerate(self.evaluate_envs):
+                score = evaluate_agent(self.model, env)
+                self.partial_rewards[i].append(score)
+                if score >= 200:
+                    sum += 1
+            return sum/len(self.evaluate_envs)
     
     def plot(self):
         x = np.linspace(0,self.steps, len(self.competences))
@@ -62,11 +87,11 @@ class OracleTeacher(Teacher):
         super().__init__(model, param_bounds, env_type)
         self.fit_every = fit_every
         if initial_state is None:
-            self.state = np.array([[3, 24]])
+            self.state = np.array([[0.01, 1.0]])
         else:
             self.state = initial_state
         if direction_vector is None:
-            self.direction = np.array([[1, -0.2]])
+            self.direction = np.array([[0.05, -0.05]])
         else:
             self.direction = direction_vector
         self.last_sum = -np.inf
@@ -94,7 +119,7 @@ class OracleTeacher(Teacher):
             x = np.linspace(0,self.step, len(self.competences))
             fig, ax = plt.subplots(1, 1)
             ax.plot(x, np.array(self.competences))
-            fig.savefig(f"various_imgs/no_{self.step}")
+            fig.savefig(f"various_imgs/{self.env_type}_oracle")
             plt.close(fig)
 
 class RandomTeacher(Teacher):
@@ -115,7 +140,7 @@ class RandomTeacher(Teacher):
         x = np.linspace(0,self.steps, len(self.competences))
         fig, ax = plt.subplots(1, 1)
         ax.plot(x, np.array(self.competences))
-        fig.savefig(f"various_imgs/no_rand_{self.steps}")
+        fig.savefig(f"various_imgs/{self.env_type}_random_{self.steps}")
         plt.close(fig)
 
     def _sample_random(self):
@@ -196,7 +221,7 @@ def plot_gmm_2d(gmm, tasks_scaled, alps, save_path=None):
     plt.close(fig)
 
 class ALPGMMTeacher(Teacher):
-    def __init__(self, model, param_bounds, env_type, max_history=250, fit_every=2):
+    def __init__(self, model, param_bounds, env_type, max_history=500, fit_every=2):
         super().__init__(model, param_bounds, env_type)
         self.param_bounds = param_bounds
         self.max_history = max_history
@@ -206,7 +231,7 @@ class ALPGMMTeacher(Teacher):
         self.gmm = None
         self.fit_every = fit_every
         self.steps = 0
-        self.gmm_components = len(param_bounds)+1
+        self.gmm_components = 3*(len(param_bounds)+1)
         self.knn = NearestNeighbors(n_neighbors=1, algorithm='kd_tree')
 
         self.mins = np.array([low for (low, _) in self.param_bounds])
@@ -251,7 +276,7 @@ class ALPGMMTeacher(Teacher):
             x = np.linspace(0,self.steps, len(self.competences))
             fig, ax = plt.subplots(1, 1)
             ax.plot(x, np.array(self.competences))
-            fig.savefig(f"various_imgs/no_alp_bipedal{self.steps}.png")
+            fig.savefig(f"various_imgs/{self.env_type}_alpgmm")
             plt.close(fig)
 
         if self.steps % self.fit_every == 0 and self.steps != 0 and len(self.task_history) >= 10:
@@ -299,17 +324,18 @@ class ALPGMMTeacher(Teacher):
         X_scaled = np.hstack([tasks_scaled, alps_scaled])
 
         gmm_configs = [
-            {"n_components": self.gmm_components, "covariance_type": "full"},
-            {"n_components": self.gmm_components, "covariance_type": "tied"},
+            {"n_components": n_components, "covariance_type": "full"} for n_components in range(2, self.gmm_components + 1)
         ]
+        final_n_components = None
 
         for config in gmm_configs:
             gmm = GaussianMixture(**config, random_state=self.seed)
             gmm.fit(X_scaled)
             if self.gmm is None or gmm.aic(X_scaled) < self.gmm.aic(X_scaled):
                 self.gmm = gmm
+                final_n_components = config["n_components"]
 
-        print(f"Fitted GMM with {self.gmm_components} components after {self.steps} steps.")
+        print(f"Fitted GMM with {final_n_components} components after {self.steps} steps.")
         plot_gmm_2d(self.gmm, tasks_scaled, alps_scaled, save_path=f"gmm_plots/gmm_plot_{self.steps}.png")
 
     def _compute_alp(self, task, reward):

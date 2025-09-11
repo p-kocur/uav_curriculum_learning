@@ -1,15 +1,29 @@
-import gymnasium as gym
-from carl.envs import CARLCartPole, CARLMountainCar
+import json
+import os
+import time
+import sys
+from stable_baselines3 import PPO, SAC
 
-CARLCartPole.render_mode = "human"
-env = CARLCartPole()
-env.reset()
+from stable_baselines3 import PPO, SAC, TD3  # import the algorithm you trained with
 
-for i in range(10000):
-    action = env.action_space.sample()
-    obs, reward, done, info, _ = env.step(action)
-    frame = env.render()  # Should return an image frame (NumPy array)
-    print(type(frame), frame.shape if frame is not None else None)
-    if done:
-        obs = env.reset()
-        print("Environment reset")
+# Example: if you trained with SAC
+model = SAC.load("logs_ppo_bipedal_walker/1757368048/best_model.zip")
+from bipedal_parametrized import ParamBipedalWalker
+
+# You need an environment to use the model
+env = ParamBipedalWalker(stump_distance=0.2, stump_height=0.2, render_mode="human")
+
+# If you used VecNormalize during training, load it too
+from stable_baselines3.common.vec_env import VecNormalize
+
+# Don’t forget to set env.training = False and env.norm_reward = False for evaluation
+env.training = False
+env.norm_reward = False
+
+# Evaluate or run the policy
+obs, _ = env.reset()
+for _ in range(1000):
+    action, _states = model.predict(obs, deterministic=True)
+    obs, reward, terminated, truncated, info = env.step(action)
+    if terminated or truncated:
+        obs, _ = env.reset()

@@ -1,22 +1,17 @@
 import numpy as np
 from typing import Dict
 from stable_baselines3.common.utils import set_random_seed
-import numpy as np
 from typing import Callable, Dict, Optional
-import gymnasium as gym
-try:
-    from carl.envs import CARLCartPole
-except ImportError:
-    pass
 
 import gymnasium as gym
 from gymnasium.wrappers import TimeLimit
 
 from bipedal_parametrized import ParamBipedalWalker
-#from scripts.gym_wrapper import DroneForestEnv
 import scripts.json_utils as jutils
 
-
+class FloatRewardWrapper(gym.RewardWrapper):
+    def reward(self, reward):
+        return float(reward)
 
 class SqueezeObsWrapper(gym.ObservationWrapper):
     """Ensure obs has shape (4,) not (4,1)."""
@@ -69,12 +64,13 @@ def evaluate_agent(model, eval_envs, n_episodes=4, return_partials=False):
         return np.mean(total_rewards)
     
 def make_env(rank: int, seed: int = 0, config_dict: Optional[Dict] = None, env_type: str = "drone") -> Callable[[], object]:
-    """Factory function for DroneForestEnv or BipedalWalker, compatible with SubprocVecEnv."""
+    """Factory function for DroneForestEnv or BipedalWalker, compatible with SubprocVecEnv and DummyVecEnv."""
 
     if config_dict is None:
         config_dict = {}
 
     if env_type == "drone":
+        from scripts.gym_wrapper import DroneForestEnv
         def _init() -> object:
             env = DroneForestEnv(
                 actions=config_dict["actions"],
@@ -99,6 +95,7 @@ def make_env(rank: int, seed: int = 0, config_dict: Optional[Dict] = None, env_t
             env.reset(seed=seed + rank)
             return env
     elif env_type == "cart":
+        from carl.envs import CARLCartPole
         def _init() -> object:
             context = CARLCartPole.get_default_context()
             context_dict = {}
@@ -108,10 +105,6 @@ def make_env(rank: int, seed: int = 0, config_dict: Optional[Dict] = None, env_t
                 else:
                     context_dict[key] = np.array([context.get(key)], dtype=np.float32)
             context = context_dict
-            # env = CARLCartPole(contexts={
-            #     "0": {"masspole": np.array([config_dict.get("masspole", 0.1)], dtype=np.float32), 
-            #           "length": np.array([config_dict.get("length", 0.5)], dtype=np.float32)},
-            # })
             env = CARLCartPole(contexts={0: context})
             env = RemoveContextWrapper(env)
             env.reset(seed=seed + rank)
@@ -120,7 +113,7 @@ def make_env(rank: int, seed: int = 0, config_dict: Optional[Dict] = None, env_t
         def _init() -> object:
             stump_height = config_dict.get("stump_height", 1.0)
             stump_distance = config_dict.get("stump_distance", 1.0)
-            env = TimeLimit(ParamBipedalWalker(stump_height=stump_height, stump_distance=stump_distance), max_episode_steps=2000)
+            env = FloatRewardWrapper(TimeLimit(ParamBipedalWalker(stump_height=stump_height, stump_distance=stump_distance), max_episode_steps=2000))
             env.reset(seed=seed + rank)
             return env
     else:

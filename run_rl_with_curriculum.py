@@ -2,12 +2,14 @@ import json
 import os
 import time
 import sys
-from stable_baselines3 import PPO, SAC
+from stable_baselines3 import PPO, SAC, TD3
 from stable_baselines3.common.callbacks import EvalCallback
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 import torch
 from torch import nn
+
+from huggingface_sb3 import load_from_hub
 
 import scripts.json_utils as jutils
 from teachers import OracleTeacher, ALPGMMTeacher, RandomTeacher
@@ -61,8 +63,12 @@ def main(scenario, teacher_type):
 
     train_envs = SubprocVecEnv(
         [make_env(i, config_dict=config_dict, env_type=scenario.split('_')[0]) for i in range(rl_dict["nb_training_envs"])]
+    ) if torch.cuda.is_available() else DummyVecEnv(
+        [make_env(i, config_dict=config_dict, env_type=scenario.split('_')[0]) for i in range(rl_dict["nb_training_envs"])]
     )
     eval_envs = SubprocVecEnv(
+        [make_env(i, config_dict=config_dict, env_type=scenario.split('_')[0]) for i in range(rl_dict["nb_eval_envs"])]
+    ) if torch.cuda.is_available() else DummyVecEnv(
         [make_env(i, config_dict=config_dict, env_type=scenario.split('_')[0]) for i in range(rl_dict["nb_eval_envs"])]
     )
 
@@ -94,23 +100,53 @@ def main(scenario, teacher_type):
     #     device="cuda" if torch.cuda.is_available() else "cpu",
     # )
 
-    policy_kwargs = dict(
-        net_arch=[400, 300],
-        activation_fn=nn.ReLU
-    )
+    # policy_kwargs = dict(
+    #     net_arch=[400, 300],
+    #     activation_fn=nn.ReLU
+    # )
 
-    # Define SAC model
-    model = SAC(
-        "MlpPolicy",
-        train_envs,
-        policy_kwargs=policy_kwargs,
-        ent_coef=0.005,             # entropy coefficient
-        learning_rate=0.001,        # learning rate
-        train_freq=10,              # gradient updates every 10 steps
-        batch_size=1000,            # number of samples per gradient step
-        buffer_size=2_000_000,      # replay buffer size
-        verbose=1,
-        device="cuda" if torch.cuda.is_available() else "cpu",
+    # # Define SAC model
+    # model = SAC(
+    #     "MlpPolicy",
+    #     train_envs,
+    #     policy_kwargs=policy_kwargs,
+    #     ent_coef=0.005,             # entropy coefficient
+    #     learning_rate=0.001,        # learning rate
+    #     train_freq=10,              # gradient updates every 10 steps
+    #     batch_size=1000,            # number of samples per gradient step
+    #     buffer_size=300_000,      # replay buffer size
+    #     verbose=1,
+    #     device="cuda" if torch.cuda.is_available() else "cpu",
+    # )
+
+    # policy_kwargs = dict(net_arch=[400, 300])  # TD3 default from original paper
+    # model = TD3(
+    #     "MlpPolicy",
+    #     train_envs,
+    #     policy_kwargs=policy_kwargs,
+    #     learning_rate=1e-3,
+    #     buffer_size=int(1e6),
+    #     batch_size=256,
+    #     verbose=1,
+    #     seed=0,
+    # )
+
+    # policy_kwargs = dict(net_arch=[256, 256])  # two hidden layers (SB3's SAC default is 256)
+    # model = SAC(
+    #     "MlpPolicy",
+    #     train_envs,
+    #     policy_kwargs=policy_kwargs,
+    #     learning_rate=3e-4,
+    #     buffer_size=int(1e6),
+    #     batch_size=256,
+    #     train_freq=1,
+    #     verbose=1,
+    #     seed=0,
+    # )
+
+    model = TD3.load_from_hub(
+        repo_id="sb3/td3-BipedalWalker-v3",
+        # optionally: load custom policy_kwargs if needed (but the saved model should include that)
     )
 
     if teacher_type == "alpgmm":
@@ -133,18 +169,22 @@ def main(scenario, teacher_type):
 
         train_envs = SubprocVecEnv(
             [make_env(i, config_dict=config_dict, env_type=scenario.split('_')[0]) for i in range(rl_dict["nb_training_envs"])]
+        ) if torch.cuda.is_available() else DummyVecEnv(
+            [make_env(i, config_dict=config_dict, env_type=scenario.split('_')[0]) for i in range(rl_dict["nb_training_envs"])]
         )
         model.set_env(train_envs)
         model.learn(total_timesteps=step_chunk, reset_num_timesteps=False, callback=eval_callback)
 
         eval_envs_task = SubprocVecEnv(
             [make_env(i, config_dict=config_dict, env_type=scenario.split('_')[0]) for i in range(rl_dict["nb_eval_envs"])]
+        ) if torch.cuda.is_available() else DummyVecEnv(
+            [make_env(i, config_dict=config_dict, env_type=scenario.split('_')[0]) for i in range(rl_dict["nb_eval_envs"])]
         )
         reward = evaluate_agent(model, eval_envs_task, n_episodes=4)
         teacher.update(task, reward)
 
     try:
-        teacher.plot("test")
+        teacher.plot()
     except Exception as e:
         print(f"Error plotting teacher data: {e}")
 
