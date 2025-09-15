@@ -7,7 +7,7 @@ from stable_baselines3 import PPO, SAC
 from stable_baselines3 import PPO, SAC, TD3  # import the algorithm you trained with
 
 # Example: if you trained with SAC
-model = SAC.load("logs_ppo_bipedal_walker/1757368048/best_model.zip")
+model = SAC.load("sac_bipedalwalker.zip")
 from bipedal_parametrized import ParamBipedalWalker
 
 # You need an environment to use the model

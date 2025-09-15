@@ -9,8 +9,6 @@ from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
 import torch
 from torch import nn
 
-from huggingface_sb3 import load_from_hub
-
 import scripts.json_utils as jutils
 from teachers import OracleTeacher, ALPGMMTeacher, RandomTeacher
 from utils import dict_from_task, make_env, evaluate_agent
@@ -149,12 +147,14 @@ def main(scenario, teacher_type):
     #     # optionally: load custom policy_kwargs if needed (but the saved model should include that)
     # )
 
-    checkpoint = load_from_hub(
-        repo_id="araffin/tqc-BipedalWalker-v3",
-        filename="tqc-BipedalWalker-v3.zip"
-    )
+    # checkpoint = load_from_hub(
+    #     repo_id="araffin/tqc-BipedalWalker-v3",
+    #     filename="tqc-BipedalWalker-v3.zip"
+    # )
 
-    model = TD3.load(checkpoint)
+    # model = TD3.load(checkpoint)
+
+    model = SAC.load("sac_bipedalwalker.zip", env=train_envs)
 
     if teacher_type == "alpgmm":
         teacher = ALPGMMTeacher(model, param_bounds, env_type=scenario.split('_')[0])
