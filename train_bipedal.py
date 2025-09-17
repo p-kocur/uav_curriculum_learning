@@ -14,21 +14,23 @@ def main():
     )
 
     # Initialize SAC model
-    model = SAC(
-        "MlpPolicy",
-        train_env,
-        policy_kwargs=policy_kwargs,
-        ent_coef=0.005,             # entropy coefficient
-        learning_rate=0.001,        # learning rate
-        train_freq=10,              # gradient updates every 10 steps
-        batch_size=1000,            # number of samples per gradient step
-        buffer_size=300_000,        # replay buffer size
-        verbose=1,
-        device="cuda" if torch.cuda.is_available() else "cpu",
-    )
+    # model = SAC(
+    #     "MlpPolicy",
+    #     train_env,
+    #     policy_kwargs=policy_kwargs,
+    #     ent_coef=0.005,             # entropy coefficient
+    #     learning_rate=0.001,        # learning rate
+    #     train_freq=10,              # gradient updates every 10 steps
+    #     batch_size=1000,            # number of samples per gradient step
+    #     buffer_size=300_000,        # replay buffer size
+    #     verbose=1,
+    #     device="cuda" if torch.cuda.is_available() else "cpu",
+    # )
 
-    # Train for 1,000,000 steps
-    model.learn(total_timesteps=1_000_000)
+    model = SAC.load("sac_bipedalwalker.zip", env=train_env)
+
+    # Train for 2,000,000 steps
+    model.learn(total_timesteps=2_000_000)
 
     # Save the trained model
     model.save("sac_bipedalwalker")
