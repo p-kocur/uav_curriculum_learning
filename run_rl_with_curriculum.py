@@ -171,7 +171,7 @@ def main(scenario, teacher_type):
     for t in range(0, total_steps, step_chunk):
         print(f"Training step {t}/{total_steps}")
         task = teacher.sample_task()
-        config_dict = dict_from_task(task)
+        config_dict = dict_from_task(task, scenario)
         print(f"\n\n\nTask: {task}\n\n\n")
 
         train_envs = SubprocVecEnv(

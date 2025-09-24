@@ -137,7 +137,7 @@ def dict_from_task(task: list, env_type: str = "drone"):
         config_dict["length"] = float(task[1])
         # Add more parameters as needed
         return config_dict
-    elif env_type == "bipedal":
+    elif "bipedal" in env_type:
         # Example: task = [stump_height, stump_distance]
         config_dict = {}
         config_dict["stump_height"] = float(task[0])

@@ -30,7 +30,7 @@ class Teacher:
             for e1, e2 in zip(elements_1, elements_2):
                 evaluate_tasks.append([float(e1), float(e2)])
             for task in evaluate_tasks:
-                self.evaluate_envs.append(SubprocVecEnv([make_env(0, config_dict=dict_from_task(task), env_type=env_type)])) if torch.cuda.is_available() else self.evaluate_envs.append(DummyVecEnv([make_env(0, config_dict=dict_from_task(task), env_type=env_type)]))
+                self.evaluate_envs.append(SubprocVecEnv([make_env(0, config_dict=dict_from_task(task, env_type), env_type=env_type)])) if torch.cuda.is_available() else self.evaluate_envs.append(DummyVecEnv([make_env(0, config_dict=dict_from_task(task, env_type), env_type=env_type)]))
 
         elif self.competence_metric == "binary":
             elements_1 = np.linspace(self.mins[0], self.maxs[0], 5)
@@ -39,7 +39,7 @@ class Teacher:
                 for e2 in elements_2:
                     evaluate_tasks.append([float(e1), float(e2)])
             for task in evaluate_tasks:
-                self.evaluate_envs.append(SubprocVecEnv([make_env(0, config_dict=dict_from_task(task), env_type=env_type)])) if torch.cuda.is_available() else self.evaluate_envs.append(DummyVecEnv([make_env(0, config_dict=dict_from_task(task), env_type=env_type)]))
+                self.evaluate_envs.append(SubprocVecEnv([make_env(0, config_dict=dict_from_task(task, env_type), env_type=env_type)])) if torch.cuda.is_available() else self.evaluate_envs.append(DummyVecEnv([make_env(0, config_dict=dict_from_task(task, env_type), env_type=env_type)]))
 
         self.competences = []
         self.model= model
@@ -60,6 +60,7 @@ class Teacher:
             sum = 0
             for i, env in enumerate(self.evaluate_envs):
                 score = evaluate_agent(self.model, env)
+                print(f"Score {i}: {score}")
                 self.partial_rewards[i].append(score)
                 if score >= 200:
                     sum += 1
@@ -91,7 +92,7 @@ class OracleTeacher(Teacher):
         else:
             self.state = initial_state
         if direction_vector is None:
-            self.direction = np.array([[0.05, -0.05]])
+            self.direction = np.array([[0.02, -0.02]])
         else:
             self.direction = direction_vector
         self.last_sum = -np.inf
@@ -140,7 +141,7 @@ class RandomTeacher(Teacher):
         x = np.linspace(0,self.steps, len(self.competences))
         fig, ax = plt.subplots(1, 1)
         ax.plot(x, np.array(self.competences))
-        fig.savefig(f"various_imgs/{self.env_type}_random_{self.steps}")
+        fig.savefig(f"various_imgs/{self.env_type}_random")
         plt.close(fig)
 
     def _sample_random(self):
@@ -150,10 +151,12 @@ class RandomTeacher(Teacher):
 
         
 
-    
-def proportional_choice(v, random_state):
-    probas = np.array(v) / np.sum(v)
-    return np.random.choice(range(len(v)), p=probas)
+def proportional_choice(v, random_state, eps=0.):
+    if np.sum(v) == 0 or random_state.rand() < eps:
+        return random_state.randint(np.size(v))
+    else:
+        probas = np.array(v) / np.sum(v)
+        return np.where(random_state.multinomial(1, probas) == 1)[0][0]
 
 def _get_covariance_matrix(gmm, idx, save_path=None):
     cov_type = gmm.covariance_type
@@ -202,8 +205,8 @@ def plot_gmm_2d(gmm, tasks_scaled, alps, save_path=None):
         )
         ax.add_patch(ellipse)
 
-    ax.set_xlabel("Number of Trees")
-    ax.set_ylabel("Static Y Limit")
+    ax.set_xlabel("Stump height")
+    ax.set_ylabel("Stump spacing")
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
 
@@ -221,7 +224,7 @@ def plot_gmm_2d(gmm, tasks_scaled, alps, save_path=None):
     plt.close(fig)
 
 class ALPGMMTeacher(Teacher):
-    def __init__(self, model, param_bounds, env_type, max_history=500, fit_every=2):
+    def __init__(self, model, param_bounds, env_type, max_history=250, fit_every=20):
         super().__init__(model, param_bounds, env_type)
         self.param_bounds = param_bounds
         self.max_history = max_history
@@ -231,7 +234,7 @@ class ALPGMMTeacher(Teacher):
         self.gmm = None
         self.fit_every = fit_every
         self.steps = 0
-        self.gmm_components = 3*(len(param_bounds)+1)
+        self.gmm_components = 2*(len(param_bounds)+1)
         self.knn = NearestNeighbors(n_neighbors=1, algorithm='kd_tree')
 
         self.mins = np.array([low for (low, _) in self.param_bounds])
@@ -240,7 +243,7 @@ class ALPGMMTeacher(Teacher):
     def sample_task(self):
         self.steps += 1
 
-        if self.gmm is None or np.random.rand() < 0.2 or len(self.task_history) < 10:
+        if self.gmm is None or np.random.rand() < 0.2 or len(self.task_history) < 200:
             return self._sample_random()
 
         self.alp_means = [mean[-1] for mean in self.gmm.means_]
@@ -253,7 +256,7 @@ class ALPGMMTeacher(Teacher):
 
         # Inverse-transform GMM-scaled data
         print(f"new task: {new_task}")
-        new_task = self._inverse_scale_task(np.array([new_task.reshape(1, -1)[0][:-1]])).T  # Remove ALP dim
+        new_task = self._inverse_scale_task(np.array([new_task.reshape(1, -1)[0][:-1]])).T  # Remove ALP dim and transpose 
         print(f"new task after inverse transform: {new_task}")
 
         # Clip to bounds
@@ -328,6 +331,7 @@ class ALPGMMTeacher(Teacher):
         ]
         final_n_components = None
 
+        self.gmm = None
         for config in gmm_configs:
             gmm = GaussianMixture(**config, random_state=self.seed)
             gmm.fit(X_scaled)
