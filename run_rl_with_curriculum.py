@@ -112,7 +112,7 @@ def main(scenario, teacher_type):
     #     learning_rate=0.001,        # learning rate
     #     train_freq=10,              # gradient updates every 10 steps
     #     batch_size=1000,            # number of samples per gradient step
-    #     buffer_size=300_000,      # replay buffer size
+    #     buffer_size=2000000,      # replay buffer size
     #     verbose=1,
     #     device="cuda" if torch.cuda.is_available() else "cpu",
     # )
@@ -154,7 +154,7 @@ def main(scenario, teacher_type):
 
     # model = TD3.load(checkpoint)
 
-    model = SAC.load("sac_bipedalwalker.zip", env=train_envs)
+    model = SAC.load("sac_bipedalwalker.zip", env=train_envs, buffer_size=2_000_000)
 
     if teacher_type == "alpgmm":
         teacher = ALPGMMTeacher(model, param_bounds, env_type=scenario.split('_')[0])

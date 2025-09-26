@@ -134,15 +134,16 @@ class RandomTeacher(Teacher):
         return self._sample_random()
     
     def update(self, task, reward):
-        self.competences.append(self.compute_competence())
-        print("\n\n\n")
-        print(self.steps)
-        print("\n\n\n")
-        x = np.linspace(0,self.steps, len(self.competences))
-        fig, ax = plt.subplots(1, 1)
-        ax.plot(x, np.array(self.competences))
-        fig.savefig(f"various_imgs/{self.env_type}_random")
-        plt.close(fig)
+        if self.steps % 20 == 0:
+            self.competences.append(self.compute_competence())
+            print("\n\n\n")
+            print(self.steps)
+            print("\n\n\n")
+            x = np.linspace(0,self.steps, len(self.competences))
+            fig, ax = plt.subplots(1, 1)
+            ax.plot(x, np.array(self.competences))
+            fig.savefig(f"various_imgs/{self.env_type}_random")
+            plt.close(fig)
 
     def _sample_random(self):
         return np.array([(high-low) * self.random_state.rand() + low for (low, high) in self.param_bounds])

@@ -28,14 +28,15 @@ class ParamBipedalWalker(BipedalWalker):
         state = GRASS
         velocity = 0.0 
         y = TERRAIN_HEIGHT
-        counter = int(TERRAIN_STARTPAD / self.stump_distance)
+        counter = int(TERRAIN_STARTPAD * 10)
         oneshot = False
         self.terrain = []
         self.terrain_x = []
         self.terrain_y = [] 
 
-        new_terrain_step = TERRAIN_STEP * self.stump_distance
-        new_terrain_length = int(TERRAIN_LENGTH / self.stump_distance)
+        new_terrain_step = TERRAIN_STEP / 10
+        new_terrain_length = TERRAIN_LENGTH * 10
+        new_terrain_grass = int(self.stump_distance * 200)  # in new steps
 
         for i in range(new_terrain_length):
             x = i * new_terrain_step
@@ -43,12 +44,13 @@ class ParamBipedalWalker(BipedalWalker):
 
             if state == STUMP and oneshot:
                 if oneshot:
-                    counter = int(TERRAIN_STEP / new_terrain_step)
+                    counter = int(0.5 / new_terrain_step)
+                actual_stump_height = max(np.random.normal(self.stump_height, 0.05), 0.001)
                 poly = [
                     (x, y),
                     (x + counter * new_terrain_step, y),
-                    (x + counter * new_terrain_step, y + self.stump_height * OBSTACLE_HEIGHT),
-                    (x, y + self.stump_height * OBSTACLE_HEIGHT),
+                    (x + counter * new_terrain_step, y + actual_stump_height * OBSTACLE_HEIGHT),
+                    (x, y + actual_stump_height * OBSTACLE_HEIGHT),
                 ]
                 self.fd_polygon.shape.vertices = poly
                 t = self.world.CreateStaticBody(fixtures=self.fd_polygon)
@@ -59,7 +61,7 @@ class ParamBipedalWalker(BipedalWalker):
             self.terrain_y.append(y)
             counter -= 1
             if counter == 0:
-                counter = TERRAIN_GRASS
+                counter = new_terrain_grass
                 if state == GRASS and hardcore:
                     state = STUMP
                     oneshot = True
