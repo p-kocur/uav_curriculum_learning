@@ -15,3 +15,5 @@ dependencies:
       - pyglet
       - PyOpenGL
       - glfw
+      - scikit-learn
+      - matplotlib
